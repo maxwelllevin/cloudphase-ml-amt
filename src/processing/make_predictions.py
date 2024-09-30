@@ -221,6 +221,12 @@ def rf_1600k_predict(
             df[var] = 0
 
     out = xr.full_like(ds["cloud_phase_mplgr"], fill_value=0)
+    pred_confidences = (
+        xr.full_like(ds["cloud_phase_mplgr"], -1)
+        .expand_dims({"phase": 8}, axis=-1)
+        .copy()
+    )
+
     if len(df) >= 1:
         inputs = df.reset_index(drop=True)  # drop time/height4
         pred = pd.Series(rf.predict(inputs), index=df.index).map(PHASE_MAP)
@@ -230,11 +236,6 @@ def rf_1600k_predict(
         if return_confidences:
             grid = list(
                 product(out.time.data, np.round(out.height.data, 2), np.arange(8))
-            )
-            pred_confidences = (
-                xr.full_like(ds["cloud_phase_mplgr"], -1)
-                .expand_dims({"phase": 8}, axis=-1)
-                .copy()
             )
             pred_proba = (
                 pd.DataFrame(
@@ -249,7 +250,9 @@ def rf_1600k_predict(
             pred_confidences.data[:] = (
                 pred_proba["value"].reindex(grid).fillna(0).to_xarray().data[:]
             )
-            return out, pred_confidences
+
+    if return_confidences:
+        return out, pred_confidences
 
     return out
 
@@ -283,6 +286,12 @@ def mlp_1600k_predict(
         df[var] = norm(df[var]).fillna(0)
 
     out = xr.full_like(ds["cloud_phase_mplgr"], fill_value=0)
+    pred_confidences = (
+        xr.full_like(ds["cloud_phase_mplgr"], -1)
+        .expand_dims({"phase": 8}, axis=-1)
+        .copy()
+    )
+
     if len(df) >= 1:
         inputs = df.reset_index(drop=True)  # drop time/height
         pred = pd.Series(mlp.predict(inputs), index=df.index).map(PHASE_MAP)
@@ -292,11 +301,6 @@ def mlp_1600k_predict(
         if return_confidences:
             grid = list(
                 product(out.time.data, np.round(out.height.data, 2), np.arange(8))
-            )
-            pred_confidences = (
-                xr.full_like(ds["cloud_phase_mplgr"], -1)
-                .expand_dims({"phase": 8}, axis=-1)
-                .copy()
             )
             pred_proba = (
                 pd.DataFrame(
@@ -311,7 +315,10 @@ def mlp_1600k_predict(
             pred_confidences.data[:] = (
                 pred_proba["value"].reindex(grid).fillna(0).to_xarray().data[:]
             )
-            return out, pred_confidences
+
+    if return_confidences:
+        return out, pred_confidences
+
     return out
 
 
