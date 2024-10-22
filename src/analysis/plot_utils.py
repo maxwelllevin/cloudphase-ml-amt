@@ -1,11 +1,12 @@
-import seaborn as sns
-import numpy as np
-import matplotlib.colors as mcolors
-import plotly.graph_objs as go
 from typing import Any
 
+import matplotlib.colors as mcolors
+import numpy as np
+import plotly.graph_objs as go
+import seaborn as sns
+
 PHASE_MAP = {
-    # 0: "clear",
+    0: "clear",
     1: "liquid",
     2: "ice",
     3: "mixed",
@@ -15,29 +16,42 @@ PHASE_MAP = {
     7: "snow",
     # 8: "unknown",
 }
+PHASE_TO_NUM_MAP = {
+    "clear": 0,
+    "liquid": 1,
+    "ice": 2,
+    "mixed": 3,
+    "drizzle": 4,
+    "liq_driz": 5,
+    "rain": 6,
+    "snow": 7,
+    # "unknown": 8,
+}
 colormap = {
-    'liquid': 'green',
-    'ice': 'blue',
-    'mixed': 'red',
-    'drizzle': 'lightseagreen',
-    'liq_driz': 'pink',
-    'rain': 'gold',
-    'snow': 'black',
-    'unknown': 'dimgray'
+    "liquid": "green",
+    "ice": "blue",
+    "mixed": "red",
+    "drizzle": "lightseagreen",
+    "liq_driz": "pink",
+    "rain": "gold",
+    "snow": "black",
+    "unknown": "dimgray",
 }
 
 _cblind = sns.color_palette("colorblind")
 cblind_cmap = {
-    "clear":    "white",
-    "liquid":   _cblind[2],  # green
-    "ice":      _cblind[0],  # darker blue
-    "mixed":    _cblind[3],  # burnt orange
-    "drizzle":  _cblind[9],  # lighter blue
+    "clear": "white",
+    "liquid": _cblind[2],  # green
+    "ice": _cblind[0],  # darker blue
+    "mixed": _cblind[3],  # burnt orange
+    "drizzle": _cblind[9],  # lighter blue
     "liq_driz": _cblind[6],  # light pink
-    "rain":     _cblind[8],  # yellow
-    "snow":     _cblind[5],  # brown
-    "unknown":    "black",
+    "rain": _cblind[8],  # yellow
+    "snow": _cblind[5],  # brown
+    "unknown": "black",
 }
+
+
 def fCMAP(data) -> sns.color_palette:
     """Data should be array-like with category values (liquid, ice, etc.)"""
     data = np.array(data)
@@ -46,13 +60,16 @@ def fCMAP(data) -> sns.color_palette:
     uniq = data[unique_indices]
     return sns.color_palette([cblind_cmap[v] for v in uniq])
 
+
 def rgb_to_hex(rgb):
     """Function to convert the sns colormap/values to hex for plotly"""
     return mcolors.to_hex(rgb)
 
-PX_CMAP = {p: rgb_to_hex(c) for p,c in cblind_cmap.items()}
+
+PX_CMAP = {p: rgb_to_hex(c) for p, c in cblind_cmap.items()}
 
 CMAP = fCMAP(list(cblind_cmap))
+
 
 def create_figure(
     size: tuple[int, int] = (1200, 800),
@@ -153,7 +170,7 @@ def create_figure(
             ),
             **legend,
         },
-        margin=dict(t=0, b=0, l=0, r=10)
+        margin=dict(t=0, b=0, l=0, r=10),
     )
     layout_settings.update(**kwargs)
     fig = go.Figure(layout=go.Layout(**layout_settings))
