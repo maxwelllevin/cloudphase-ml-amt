@@ -26,8 +26,8 @@ import tensorflow as tf
 warnings.simplefilter("ignore")
 
 
-NSA_ID = "nsa6"
-
+# INPUT_DIR = Path("/data/home/levin/data/datastream/mos/mosthermocldphaseM1.c1/")
+# INPUT_GLOB = "*.nc"
 INPUT_DIR = Path(__file__).parent.parent / "preprocessing/data/raw"
 INPUT_GLOB = "*c1.2021*.nc"
 
@@ -201,16 +201,7 @@ def rf_1600k_predict(
     missing: list[str] | None = None,
     return_confidences: bool = False,
 ) -> xr.DataArray:
-    features = [
-        "temp",
-        "mpl_backscatter",
-        "mpl_linear_depol_ratio",
-        "reflectivity",
-        "radar_linear_depolarization_ratio",
-        "spectral_width",
-        "mean_doppler_velocity",
-        "mwrret1liljclou_be_lwp",
-    ]
+    features = rf.feature_names_in_
     ds_sub = ds[["time", "height", "cloud_flag", *features]]
     df = ds_sub.to_dataframe().fillna(0)
     df = df[df["cloud_flag"] == 1]
