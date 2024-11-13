@@ -38,6 +38,17 @@ colormap = {
     "unknown": "dimgray",
 }
 
+PHASE_LABEL_MAP = {
+    "clear": "Clear",
+    "liquid": "Liquid",
+    "ice": "Ice",
+    "mixed": "Mixed",
+    "drizzle": "Drizzle",
+    "liq_driz": "Liq/Driz",
+    "rain": "Rain",
+    "snow": "Snow",
+}
+
 _cblind = sns.color_palette("colorblind")
 cblind_cmap = {
     "clear": "white",
