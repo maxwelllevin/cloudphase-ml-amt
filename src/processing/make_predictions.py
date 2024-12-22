@@ -363,11 +363,16 @@ def cnn_predict(
         channels = [CNN_FEATURES.index(var) for var in missing]
         cnn_inputs = zero_out_channels(cnn_inputs, channels)
 
+    # Make predictions and get 'pred_as_class' with shape (time, height). Note that we
+    # first get confidence scores (cnn.predict()) and drop the first index (clear-sky)
+    # to ensure that the model cannot mistake a cloudy pixel for a clear sky pixel.
     cnn_pred = cnn.predict(cnn_inputs, verbose=0)  # type: ignore
-    pred_as_class = np.argmax(cnn_pred, axis=-1)  # remove one-hot encoding
+    pred_as_class = np.argmax(cnn_pred[..., slice(1, 8)], axis=-1) + 1
 
     pred_xr = xr.full_like(ds["cloud_phase_mplgr"], -1)
     pred_xr.data[:] = pred_as_class[:]
+    where_clear = np.where(ds["cloud_flag"].data == 0)
+    pred_xr.data[where_clear] = 0  # fill in clear-sky where the VAP knows it is clear
 
     if return_confidences:
         pred_confidences = (
@@ -401,6 +406,15 @@ def main():
     print(f"INPUTS: {INPUT_DIR}")
     print(f"OUTPUTS: {OUT_DIR}")
 
+    files = sorted(INPUT_DIR.glob(INPUT_GLOB))
+    print(f"found {len(files)} files.")
+
+    if len(files) and (OUT_DIR / files[0].name).exists():
+        print("WARNING: some data have already been processed.")
+        if "y" != input("Continue processing? (data will be overwritten) [y/N]"):
+            print("Exited without processing data.")
+            return
+
     print("loading models...")
     model_labels = [
         "cnn_20240429_213223",  # Best model that uses 2D spatial dropouts
@@ -411,9 +425,10 @@ def main():
     models = {label: _load_model(label) for label in model_labels}
 
     print("making predictions...")
-    files = sorted(INPUT_DIR.glob(INPUT_GLOB))
 
     for i, filepath in enumerate(track(files)):
+        output_filepath = OUT_DIR / filepath.name
+
         print(f"working on {filepath.name}...")
 
         ds = load_data(filepath).isel(height=slice(0, 384))
@@ -448,7 +463,7 @@ def main():
                     raise ValueError(f"unrecognized model: {label}")
 
         ds = pad.sel(time=slice(tmin, tmax))
-        ds.to_netcdf(OUT_DIR / filepath.name)
+        ds.to_netcdf(output_filepath)
 
 
 if __name__ == "__main__":
