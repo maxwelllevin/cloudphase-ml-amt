@@ -90,6 +90,7 @@ def process_files(files: list[Path], label: str) -> None:
     _melt = df.melt(id_vars=["height"], var_name="variable", value_name="phase")
     _result = _melt.groupby(["height", "variable", "phase"]).size()
     count_df = pd.DataFrame(dict(count=_result))
+    print(f"saving phase counts by height to {count_path}...")
     count_df.to_parquet(count_path)
 
     print("done!")
