@@ -86,7 +86,7 @@ def process_files(files: list[Path], label: str) -> None:
     pred_df.to_parquet(pred_path)
 
     print("working on phase counts by height...")
-    df = pred_df[list(CLDPHASE_VARS.values())].reset_index().droplevel("time", axis=1)
+    df = pred_df[list(CLDPHASE_VARS.values())].reset_index().drop("time", axis=1)
     _melt = df.melt(id_vars=["height"], var_name="variable", value_name="phase")
     _result = _melt.groupby(["height", "variable", "phase"]).size()
     count_df = pd.DataFrame(dict(count=_result))
