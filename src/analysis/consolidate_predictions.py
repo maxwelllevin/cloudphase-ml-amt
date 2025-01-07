@@ -26,35 +26,29 @@ PHASE_MAP = {
     7: "snow",
 }
 
-CLDPHASE_VARS = {
-    "cnn_20240429_213223": "cnn_icd",
+MODELS = {
     "cnn_20240501_090456": "cnn",
+    "cnn_20240429_213223": "cnn_icd",
     "rf_1600k_20240514_033147": "rf",
     "mlp_1600k_20240514_052837": "mlp",
-    "cloud_phase_mplgr": "cloud_phase",
-    # TODO: Replace these more programmatically and also store them separately
-    "cnn_20240501_090456_mpl_b": "cnn_icd_mpl_b",
-    "cnn_20240501_090456_mpl_ldr": "cnn_icd_mpl_ldr",
-    "cnn_20240501_090456_rad_ref": "cnn_icd_rad_ref",
-    "cnn_20240501_090456_rad_ldr": "cnn_icd_rad_ldr",
-    "cnn_20240501_090456_rad_spec": "cnn_icd_rad_spec",
-    "cnn_20240501_090456_rad_mdv": "cnn_icd_rad_mdv",
-    "cnn_20240501_090456_sonde": "cnn_icd_sonde",
-    "cnn_20240501_090456_mwr": "cnn_icd_mwr",
-    "cnn_20240501_090456_mpl": "cnn_icd_mpl",
-    "cnn_20240501_090456_rad": "cnn_icd_rad",
-    "cnn_20240429_213223_mpl_b": "cnn_mpl_b",
-    "cnn_20240429_213223_mpl_ldr": "cnn_mpl_ldr",
-    "cnn_20240429_213223_rad_ref": "cnn_rad_ref",
-    "cnn_20240429_213223_rad_ldr": "cnn_rad_ldr",
-    "cnn_20240429_213223_rad_spec": "cnn_rad_spec",
-    "cnn_20240429_213223_rad_mdv": "cnn_rad_mdv",
-    "cnn_20240429_213223_sonde": "cnn_sonde",
-    "cnn_20240429_213223_mwr": "cnn_mwr",
-    "cnn_20240429_213223_mpl": "cnn_mpl",
-    "cnn_20240429_213223_rad": "cnn_rad",
 }
-
+ABLATION_VARS = {
+    f"{old_name}_{suffix}": f"{new_name}_{suffix}"
+    for old_name, new_name in MODELS.items()
+    for suffix in [
+        "mpl",
+        "mpl_b",
+        "mpl_ldr",
+        "mwr",
+        "rad",
+        "rad_ldr",
+        "rad_mdv",
+        "rad_ref",
+        "rad_spec",
+        "sonde",
+    ]
+}
+CLDPHASE_VARS = {"cloud_phase_mplgr": "cloud_phase", **MODELS, **ABLATION_VARS}
 
 OUT_DIR = Path(__file__).parent / "data"
 
