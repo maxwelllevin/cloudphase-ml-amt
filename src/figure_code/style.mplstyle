@@ -1,0 +1,62 @@
+savefig.dpi: 500
+savefig.format: png
+savefig.bbox: tight
+savefig.transparent: True
+
+figure.dpi: 300
+figure.figsize: 20, 16
+# figure.constrained_layout.use: False
+# figure.tight_layout.use: True
+
+legend.frameon: False
+
+font.family: serif
+# font.serif: cmr10
+# axes.formatter.use_mathtext: True
+font.size: 20
+axes.titlesize: 40
+axes.titlepad: 16
+axes.labelsize: 40
+axes.linewidth: 6
+
+
+# font.weight: bold
+
+
+
+xtick.alignment: center
+xtick.minor.visible: False
+xtick.labelsize: large
+ytick.labelsize: large
+xtick.major.size: 10
+xtick.major.width: 3
+
+# ytick.right: True
+ytick.minor.visible: False
+ytick.major.size: 10
+ytick.major.width: 3
+
+hatch.linewidth: .5
+
+
+# Light mode
+# axes.edgecolor: black
+# hatch.color: white
+
+# Dark mode
+# lines.color: white
+# patch.edgecolor: white
+# text.color: white
+# axes.edgecolor: white
+# axes.labelcolor: white
+# axes.titlecolor: white
+# xtick.color: white
+# ytick.color: white
+# grid.color: white
+
+# hatch.color: 232323
+# axes.facecolor: 232323
+# figure.facecolor: 232323
+# figure.edgecolor: 232323
+# savefig.facecolor: 232323
+# savefig.edgecolor: 232323
