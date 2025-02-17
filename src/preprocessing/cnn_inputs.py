@@ -8,12 +8,16 @@ import xarray as xr
 from tqdm.auto import tqdm
 
 # path to the nsathermocldphaseC1.c1 files
-INPUT_DATA_PATH = Path("./data/raw/nsathermocldphaseC1.c1")
+_HERE = Path(__file__).parent
+INPUT_DATA_PATH = _HERE / "data/raw/nsathermocldphaseC1.c1"
 
 # path to where the monthly nsathermocldphaseC1.c1 files will be saved. each nc file has
 # dimensions of (samples, time_idx, height_idx).
-MONTHLY_NC_OUTPUTS = Path("./data/cnn_inputs/monthly_chunks")
+MONTHLY_NC_OUTPUTS = _HERE / "data/cnn_inputs/monthly_chunks"
 MONTHLY_NC_OUTPUTS.mkdir(exist_ok=True, parents=True)
+
+# Path to the folder where the .npy training/validation/test files will be saved
+OUTPUT_FOLDER = _HERE / "data/cnn_inputs"
 
 
 # the variables we want to preserve from the raw thermocldphase.c1 data.
@@ -133,6 +137,9 @@ def save_dataset(ds: xr.Dataset, folder: Path):
 
 
 def write_monthly_chunked_files(files: list[Path]) -> list[Path]:
+    if MONTHLY_NC_OUTPUTS.exists():
+        return sorted(MONTHLY_NC_OUTPUTS.glob("*.nc"))
+
     outputs: list[Path] = []  # one file per month
     file_groups = get_monthly_file_groups(files)
     for file_group in tqdm(file_groups):
@@ -155,9 +162,9 @@ def get_train_valid_test_files(
     (2018-2020) are shuffled and split 80/20 into training and validation sets."""
     train_valid_files, test_files = [], []
     for file in monthly_files:
-        if ".2021" in file.name:
+        if "_2021" in file.name:
             test_files.append(file)
-        elif (".2018" in file.name) or (".2019" in file.name) or (".2020" in file.name):
+        elif ("_2018" in file.name) or ("_2019" in file.name) or ("_2020" in file.name):
             train_valid_files.append(file)
     shuffle(train_valid_files)  # in-place
     train_files = train_valid_files[: int(0.8 * len(train_valid_files))]
@@ -197,24 +204,33 @@ def to_cnn_files(
         axis=-1,
     )
 
-    x_path = Path(f"./data/cnn_inputs/X_{label}.npy")
-    y_path = Path(f"./data/cnn_inputs/y_{label}.npy")
+    x_path = OUTPUT_FOLDER / f"X_{label}.npy"
+    y_path = OUTPUT_FOLDER / f"y_{label}.npy"
     np.save(x_path, X)
     np.save(y_path, y)
 
     return x_path, y_path
 
 
-if __name__ == "__main__":
+def get_class_frequencies(y_data_path: Path) -> dict[int, float]:
+    y_data = np.load(y_data_path)
+    unique, counts = np.unique(y_data, return_counts=True)
+    unique = unique[1:]  # skip clear-sky
+    counts = counts[1:]  # skip clear-sky
+    frequencies = 100 * (counts / counts.sum())
+    return dict(zip(unique, np.round(frequencies, 5)))
+
+
+def main():
     files = list(INPUT_DATA_PATH.glob("*.nc"))
-    assert len(
-        files
-    ), f"Please put the raw files directly into {INPUT_DATA_PATH.resolve()}"
+    assert len(files), "Could not find any input files."
     monthly_files = write_monthly_chunked_files(files)
     train_files, valid_files, test_files = get_train_valid_test_files(monthly_files)
 
     X_tr_p, y_tr_p = to_cnn_files(train_files, "train")
     print(f"Wrote training dataset to {X_tr_p}, {y_tr_p}.")
+    print("Class frequencies in training dataset:")
+    print(get_class_frequencies(y_tr_p))
 
     X_v_p, y_v_p = to_cnn_files(valid_files, "valid")
     print(f"Wrote validation dataset to {X_v_p}, {y_v_p}.")
@@ -223,3 +239,7 @@ if __name__ == "__main__":
     print(f"Wrote testing dataset to {X_te_p}, {y_te_p}.")
 
     print("done!")
+
+
+if __name__ == "__main__":
+    main()
