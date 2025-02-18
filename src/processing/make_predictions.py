@@ -1,9 +1,7 @@
 import argparse
 import os
-import re
 import sys
 import warnings
-from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +26,9 @@ warnings.simplefilter("ignore")
 
 # INPUT_DIR = Path("/data/home/levin/data/datastream/mos/mosthermocldphaseM1.c1/")
 # INPUT_GLOB = "*.nc"
-INPUT_DIR = Path(__file__).parent.parent / "preprocessing/data/raw"
+INPUT_DIR = (
+    Path(__file__).parent.parent / "preprocessing/data/raw/nsathermocldphaseC1.c1/"
+)
 INPUT_GLOB = "*c1.2021*.nc"
 
 OUT_DIR = Path(__file__).parent / "data/predictions/"
@@ -82,18 +82,6 @@ CNN_FEATURES = [
     "mean_doppler_velocity",
     "mwrret1liljclou_be_lwp",
 ]
-
-
-def load_cnn(filepath: Path) -> keras.Model:
-    return keras.models.load_model(filepath, compile=False)  # type: ignore
-
-
-def load_rf_1600k() -> RandomForestClassifier:
-    return joblib.load(MODELS / "rf_1600k.20240504.235919.joblib")
-
-
-def load_mlp_1600k() -> MLPClassifier:
-    return joblib.load(MODELS / "mlp_1600k_norm.20240505.051911.joblib")
 
 
 def load_data(filepath: Path) -> xr.Dataset:
@@ -195,124 +183,6 @@ def get_input_tensor(ds: xr.Dataset) -> tf.Tensor:
     return tf.convert_to_tensor(X)
 
 
-def rf_1600k_predict(
-    rf: RandomForestClassifier,
-    ds: xr.Dataset,
-    missing: list[str] | None = None,
-    return_confidences: bool = False,
-) -> xr.DataArray:
-    features = rf.feature_names_in_
-    ds_sub = ds[["time", "height", "cloud_flag", *features]]
-    df = ds_sub.to_dataframe().fillna(0)
-    df = df[df["cloud_flag"] == 1]
-    df.pop("cloud_flag")
-
-    if missing:
-        for var in missing:
-            df[var] = 0
-
-    out = xr.full_like(ds["cloud_phase_mplgr"], fill_value=0)
-    pred_confidences = (
-        xr.full_like(ds["cloud_phase_mplgr"], -1)
-        .expand_dims({"phase": 8}, axis=-1)
-        .copy()
-    )
-
-    if len(df) >= 1:
-        inputs = df.reset_index(drop=True)  # drop time/height4
-        pred = pd.Series(rf.predict(inputs), index=df.index).map(PHASE_MAP)
-        index_grid = list(product(out.time.data, np.round(out.height.data, 2)))
-        out.data[:] = pred.reindex(index_grid).fillna(0).to_xarray().data[:]
-
-        if return_confidences:
-            grid = list(
-                product(out.time.data, np.round(out.height.data, 2), np.arange(8))
-            )
-            pred_proba = (
-                pd.DataFrame(
-                    rf.predict_proba(inputs),
-                    index=df.index,
-                    columns=[PHASE_MAP[c] for c in rf.classes_],
-                )
-                .melt(ignore_index=False)
-                .reset_index()
-                .set_index(["time", "height", "variable"])
-            )
-            pred_confidences.data[:] = (
-                pred_proba["value"].reindex(grid).fillna(0).to_xarray().data[:]
-            )
-
-    if return_confidences:
-        return out, pred_confidences
-
-    return out
-
-
-def mlp_1600k_predict(
-    mlp: MLPClassifier,
-    ds: xr.Dataset,
-    missing: list[str] | None = None,
-    return_confidences: bool = False,
-) -> xr.DataArray:
-    normalizations = {  # from Andrew -- thank you!
-        "temp": lambda x: (np.clip(x, -100, 50) + 30) / 30,
-        "mpl_backscatter": lambda x: (np.log(np.clip(x, 1e-8, 1e4)) + 6) / 8,
-        "mpl_linear_depol_ratio": lambda x: np.clip(x, 0, 1) * 2 - 1,
-        "reflectivity": lambda x: (np.clip(x, -70, 70) + 20) / 30,
-        "radar_linear_depolarization_ratio": lambda x: np.clip(x + 20, -20, 20) / 6,
-        "spectral_width": lambda x: np.clip(x * 5, -1, 4) - 0.5,
-        "mean_doppler_velocity": lambda x: np.clip(x + 0.5, -8, 8) / 2,
-        "mwrret1liljclou_be_lwp": lambda x: (np.log(np.clip(x, 0.1, 2000)) - 3) / 2,
-    }
-    if missing:
-        for var in missing:
-            normalizations[var] = lambda x: np.clip(x, 0, 0)
-
-    features = list(normalizations.keys())
-    ds_sub = ds[["time", "height", "cloud_flag", *features]]
-    df = ds_sub.to_dataframe()  # .fillna(0)
-    df = df[df["cloud_flag"] == 1]
-    df.pop("cloud_flag")
-    for var, norm in normalizations.items():
-        df[var] = norm(df[var]).fillna(0)
-
-    out = xr.full_like(ds["cloud_phase_mplgr"], fill_value=0)
-    pred_confidences = (
-        xr.full_like(ds["cloud_phase_mplgr"], -1)
-        .expand_dims({"phase": 8}, axis=-1)
-        .copy()
-    )
-
-    if len(df) >= 1:
-        inputs = df.reset_index(drop=True)  # drop time/height
-        pred = pd.Series(mlp.predict(inputs), index=df.index).map(PHASE_MAP)
-        index_grid = list(product(out.time.data, np.round(out.height.data, 2)))
-        out.data[:] = pred.reindex(index_grid).fillna(0).to_xarray().data[:]
-
-        if return_confidences:
-            grid = list(
-                product(out.time.data, np.round(out.height.data, 2), np.arange(8))
-            )
-            pred_proba = (
-                pd.DataFrame(
-                    mlp.predict_proba(inputs),
-                    index=df.index,
-                    columns=[PHASE_MAP[c] for c in mlp.classes_],
-                )
-                .melt(ignore_index=False)
-                .reset_index()
-                .set_index(["time", "height", "variable"])
-            )
-            pred_confidences.data[:] = (
-                pred_proba["value"].reindex(grid).fillna(0).to_xarray().data[:]
-            )
-
-    if return_confidences:
-        return out, pred_confidences
-
-    return out
-
-
 def prep_cnn_inputs(
     ds: xr.Dataset, next_file: Path | None = None
 ) -> tuple[tf.Tensor, xr.Dataset, tuple[Any, Any]]:
@@ -386,19 +256,74 @@ def cnn_predict(
     return pred_xr
 
 
-def _load_model(label: str) -> Any:
-    file_label = re.sub(r"_(\d{8})_(\d{6})", r".\1.\2", label)
-    if label.startswith("cnn"):
-        filepath = MODELS / f"{file_label}.h5"
-        print(f"loading cnn model: {filepath.name}...")
-        return load_cnn(filepath=filepath)
-    elif "1600k" in label:
-        filepath = MODELS / f"{file_label}.joblib"
-        model_name = filepath.name.split("_")[0]  # e.g., 'rf' or 'mlp'
-        print(f"loading {model_name} model: {filepath.name}...")
+def sklearn_model_pred(
+    model: MLPClassifier | RandomForestClassifier,
+    df: pd.DataFrame,
+    reshape_like: xr.DataArray,
+    missing: list[str] | None = None,
+) -> tuple[xr.DataArray, xr.DataArray]:
+    if missing is not None and len(missing):
+        df = df.copy()
+        df[missing] = 0
+    _proba = model.predict_proba(df)
+    proba_df = pd.DataFrame(
+        _proba,
+        index=df.index,
+        columns=[PHASE_MAP[c] for c in model.classes_],  # type: ignore
+    )[[1, 2, 3, 4, 5, 6, 7]]  # ensures dataframe has correct column ordering
+
+    proba = proba_df.values
+    pred = proba.argmax(axis=-1) + 1  # add 1 to get cloud phase classes (1-7)
+
+    # Coerce pred into an xarray DataArray with the right shape
+    pred_xr = xr.full_like(reshape_like, fill_value=-1, dtype=float).copy()
+    pred_xr.data[:] = pred.reshape(pred_xr.shape)[:]
+    where_clear_sky = np.where(reshape_like.values == 0)
+    pred_xr.data[where_clear_sky] = 0
+
+    # Coerce pred probabilities into xarray DataArray with the right shape
+    pred_proba_xr = (
+        xr.full_like(reshape_like, fill_value=-1, dtype=float)
+        .expand_dims({"phase": 8}, axis=-1)
+        .copy()
+    )
+    zeros = np.expand_dims(np.zeros(proba.shape[:-1]), axis=-1)
+    proba_reshaped = np.hstack([zeros, proba]).reshape(pred_proba_xr.shape)
+    pred_proba_xr.data[:] = proba_reshaped[:]
+
+    return pred_xr, pred_proba_xr
+
+
+def _load_model(filepath: str | Path) -> Any:
+    filepath = Path(filepath)
+    name = filepath.name
+    if name.startswith("cnn"):
+        print(f"loading cnn model: {name}...")
+        return keras.models.load_model(filepath, compile=False)  # type: ignore
+    elif name.endswith("joblib"):
+        print(f"loading model: {name}...")
         return joblib.load(filepath)
     else:
-        raise ValueError(f"unknown model: {label}")
+        raise ValueError(f"unknown model: {name}")
+
+
+def tensor_to_sklearn_inputs(tensor: tf.Tensor) -> pd.DataFrame:
+    X = np.array(tensor).reshape(-1, tensor.shape[-1])  # type: ignore
+    X_df = pd.DataFrame(
+        data=X,
+        columns=[
+            "cloud_flag",
+            "temp",
+            "mpl_backscatter",
+            "mpl_linear_depol_ratio",
+            "reflectivity",
+            "radar_linear_depolarization_ratio",
+            "spectral_width",
+            "mean_doppler_velocity",
+            "mwrret1liljclou_be_lwp",
+        ],
+    )
+    return X_df
 
 
 def main():
@@ -416,13 +341,15 @@ def main():
             return
 
     print("loading models...")
-    model_labels = [
-        "cnn_20240429_213223",  # Best model that uses 2D spatial dropouts
-        "cnn_20240501_090456",  # Best mode overall (no 2D spatial dropouts)
-        "rf_1600k_20240514_033147",  # Best single-pixel RF model
-        "mlp_1600k_20240514_052837",  # Best single-pixel MLP model
-    ]
-    models = {label: _load_model(label) for label in model_labels}
+    model_labels = {
+        "cnn_dropout": MODELS / "cnn.20240429.213223.h5",
+        "cnn": MODELS / "cnn.20240501.090456.h5",
+        "rf_balanced": MODELS / "rf_balanced.joblib",
+        "rf_imbalanced": MODELS / "rf_imbalanced.joblib",
+        "mlp_balanced": MODELS / "mlp_balanced.joblib",
+        "mlp_imbalanced": MODELS / "mlp_imbalanced.joblib",
+    }
+    models = {label: _load_model(filepath) for label, filepath in model_labels.items()}
 
     print("making predictions...")
 
@@ -436,15 +363,16 @@ def main():
         # Inputs for CNN models
         next_file = files[i + 1] if i + 1 < len(files) else None
         inputs, pad, (tmin, tmax) = prep_cnn_inputs(ds, next_file)
+        X_df = tensor_to_sklearn_inputs(inputs)
 
         # Make predictions & get confidences
         for label, model in models.items():
             if label.startswith("cnn"):
                 pred, conf = cnn_predict(model, inputs, pad, return_confidences=True)
-            elif label.startswith("rf"):
-                pred, conf = rf_1600k_predict(model, pad, return_confidences=True)
-            elif label.startswith("mlp"):
-                pred, conf = mlp_1600k_predict(model, pad, return_confidences=True)
+            elif label.startswith("rf") or label.startswith("mlp"):
+                pred, conf = sklearn_model_pred(
+                    model, X_df, reshape_like=pad["cloud_phase_mplgr"]
+                )
             else:
                 raise ValueError(f"unrecognized model: {label}")
             pad[label] = pred
@@ -454,13 +382,17 @@ def main():
         for ab, missing in ABLATION_STRATEGY.items():
             for label, model in models.items():
                 if label.startswith("cnn"):
-                    pad[label + ab] = cnn_predict(model, inputs, pad, missing=missing)
-                elif label.startswith("mlp"):
-                    pad[label + ab] = mlp_1600k_predict(model, pad, missing=missing)
-                elif label.startswith("rf"):
-                    pad[label + ab] = rf_1600k_predict(model, pad, missing=missing)
+                    pred = cnn_predict(model, inputs, pad, missing=missing)
+                elif label.startswith("rf") or label.startswith("mlp"):
+                    pred, _ = sklearn_model_pred(
+                        model,
+                        X_df,
+                        reshape_like=pad["cloud_phase_mplgr"],
+                        missing=missing,
+                    )
                 else:
                     raise ValueError(f"unrecognized model: {label}")
+                pad[label + ab] = pred
 
         ds = pad.sel(time=slice(tmin, tmax))
         ds.to_netcdf(output_filepath)
