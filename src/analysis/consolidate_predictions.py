@@ -10,6 +10,7 @@
 #
 # python consolidate_predictions.py path/to/files/*glob*.nc
 
+import concurrent.futures
 from pathlib import Path
 
 import pandas as pd
@@ -27,10 +28,15 @@ PHASE_MAP = {
 }
 
 MODELS = {
-    "cnn_20240501_090456": "cnn",
-    "cnn_20240429_213223": "cnn_icd",
-    "rf_1600k_20240514_033147": "rf",
-    "mlp_1600k_20240514_052837": "mlp",
+    "cnn_dropout": "cnn_dropout",
+    "cnn": "cnn",
+    "rf_balanced": "rf_balanced",
+    "rf_imbalanced": "rf_imbalanced",
+    "mlp_balanced": "mlp_balanced",
+    "mlp_imbalanced": "mlp_imbalanced",
+}
+CONFIDENCE_VARS = {
+    f"{old}_confidence": f"{new}_confidence" for old, new in MODELS.items()
 }
 ABLATION_VARS = {
     f"{old_name}_{suffix}": f"{new_name}_{suffix}"
@@ -48,39 +54,56 @@ ABLATION_VARS = {
         "sonde",
     ]
 }
-CLDPHASE_VARS = {"cloud_phase_mplgr": "cloud_phase", **MODELS, **ABLATION_VARS}
+CLDPHASE_VARS = {
+    "cloud_phase_mplgr": "cloud_phase",
+    **MODELS,
+    **CONFIDENCE_VARS,
+    **ABLATION_VARS,
+}
 
 OUT_DIR = Path(__file__).parent / "data"
 
 
+def process_file(file: Path) -> pd.DataFrame:
+    _ds = xr.open_dataset(file)
+    for var in list(CONFIDENCE_VARS):
+        _ds[var] = _ds[var][:, :, 1:].max(axis=-1)
+    _ds = _ds[list(CLDPHASE_VARS) + ["cloud_flag"]]
+    _df = _ds.to_dataframe()
+    _df = _df[_df["cloud_phase_mplgr"].isin([1, 2, 3, 4, 5, 6, 7])]
+    _df = _df[_df["cloud_flag"] == 1.0]
+    _df.pop("cloud_flag")
+    _df = _df.rename(columns=CLDPHASE_VARS)
+    for col in _df.columns:
+        if str(col) in list(CONFIDENCE_VARS.values()):
+            continue
+        _df[col] = pd.Categorical(
+            _df[col].map(PHASE_MAP),
+            categories=PHASE_MAP.values(),
+            ordered=True,
+        )
+    _ds.close()
+    return _df
+
+
 def process_files(files: list[Path], label: str) -> None:
-    pred_path = OUT_DIR / f"{label}_cloudy_predictions.parquet"
-    count_path = OUT_DIR / f"{label}_phase_counts.parquet"
+    pred_path = OUT_DIR / f"parallel_{label}_cloudy_predictions.parquet"
+    count_path = OUT_DIR / f"parallel_{label}_phase_counts.parquet"
 
     print("loading datasets...")
     predictions: list[pd.DataFrame] = []
-    for file in tqdm(files):
-        _ds = xr.open_dataset(file)[list(CLDPHASE_VARS) + ["cloud_flag"]]
-        _df = _ds.to_dataframe()
-        _df = _df[_df["cloud_phase_mplgr"].isin([1, 2, 3, 4, 5, 6, 7])]
-        _df = _df[_df["cloud_flag"] == 1.0]
-        _df.pop("cloud_flag")
-        _df = _df.rename(columns=CLDPHASE_VARS)
-        for col in _df.columns:
-            _df[col] = pd.Categorical(
-                _df[col].map(PHASE_MAP),
-                categories=PHASE_MAP.values(),
-                ordered=True,
-            )
-        predictions.append(_df)
-        _ds.close()
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=24) as executor:
+        for _df in tqdm(executor.map(process_file, files), total=len(files)):
+            predictions.append(_df)
 
     print(f"saving predictions on known cloud pixels to {pred_path}...")
     pred_df = pd.concat(predictions)
     pred_df.to_parquet(pred_path)
 
     print("working on phase counts by height...")
-    df = pred_df[list(CLDPHASE_VARS.values())].reset_index().drop("time", axis=1)
+    COUNT_VARS = {"cloud_phase_mplgr": "cloud_phase", **MODELS}
+    df = pred_df[list(COUNT_VARS.values())].reset_index().drop("time", axis=1)
     _melt = df.melt(id_vars=["height"], var_name="variable", value_name="phase")
     _result = _melt.groupby(["height", "variable", "phase"]).size()
     count_df = pd.DataFrame(dict(count=_result))
