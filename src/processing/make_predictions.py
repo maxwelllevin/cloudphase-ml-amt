@@ -24,7 +24,7 @@ import tensorflow as tf
 warnings.simplefilter("ignore")
 
 
-# INPUT_DIR = Path("/data/home/levin/data/datastream/mos/mosthermocldphaseM1.c1/")
+# INPUT_DIR = Path("/data/home/levin/data/datastream/anx/anxthermocldphaseM1.c1/")
 # INPUT_GLOB = "*.nc"
 INPUT_DIR = (
     Path(__file__).parent.parent / "preprocessing/data/raw/nsathermocldphaseC1.c1/"
@@ -336,7 +336,7 @@ def main():
 
     if len(files) and (OUT_DIR / files[0].name).exists():
         print("WARNING: some data have already been processed.")
-        if "y" != input("Continue processing? (data will be overwritten) [y/N]"):
+        if "y" != input("Continue processing? (some data will be not be rerun) [y/N]"):
             print("Exited without processing data.")
             return
 
@@ -353,8 +353,10 @@ def main():
 
     print("making predictions...")
 
-    for i, filepath in enumerate(track(files)):
+    for i, filepath in enumerate(track(files, update_period=60)):
         output_filepath = OUT_DIR / filepath.name
+        if output_filepath.exists():
+            continue
 
         print(f"working on {filepath.name}...")
 
