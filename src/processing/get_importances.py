@@ -123,8 +123,18 @@ def make_sklearn_pred(
 
 def _get_pred_func(model_label: str) -> Callable[[ModelType, np.ndarray], np.ndarray]:
     def cnn_p(model: keras.Model, X: np.ndarray) -> np.ndarray:
+        # The CNN models return a probability vector like (samples, time, height, phase)
+        # The phase dimension includes clear sky probabilities, but we know if the sky
+        # is clear because of the 'cloud_flag' input (index 0 in channel dim of X), so
+        # we take out clear sky from proba (index 0 in phase dim of proba) and manually
+        # set clear sky indexes to clear in the pred vector. This prevents the model
+        # from accidentally predicting clear sky when it is actually cloudy, essentially
+        # giving us whatever the second-most-likely phase would have been in such cases.
         proba = model.predict(X, verbose=0, batch_size=4)  # type: ignore
-        return np.argmax(proba, axis=-1) + 1
+        wo_clear_sky_proba = proba[:, :, :, 1:]
+        pred = np.argmax(wo_clear_sky_proba, axis=-1) + 1
+        pred[X.take(0, -1) == 0] = 0
+        return pred
 
     if "cnn" in model_label:
         return cnn_p
@@ -266,14 +276,15 @@ def main():
 
     print("loading data....")
     X_test, y_test = load_data()
+    print(X_test.shape)
 
     model_labels = {
         "cnn": MODELS / "cnn.20240501.090456.h5",
-        "rf_balanced": MODELS / "rf_balanced.joblib",
-        "rf_imbalanced": MODELS / "rf_imbalanced.joblib",
-        "mlp_balanced": MODELS / "mlp_balanced.joblib",
-        "mlp_imbalanced": MODELS / "mlp_imbalanced.joblib",
         "cnn_dropout": MODELS / "cnn.20240429.213223.h5",
+        "rf_balanced": MODELS / "rf_balanced.joblib",
+        "mlp_balanced": MODELS / "mlp_balanced.joblib",
+        "rf_imbalanced": MODELS / "rf_imbalanced.joblib",
+        "mlp_imbalanced": MODELS / "mlp_imbalanced.joblib",
     }
     for model_label, model_path in model_labels.items():
         print(f"Working on {model_label}...")
@@ -290,5 +301,6 @@ def main():
 
 
 if __name__ == "__main__":
-    with tf.device("CPU"):
+    # Change to CPU if you don't have GPU(s), or if it isn't working on your GPU
+    with tf.device("GPU"):
         main()
