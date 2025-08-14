@@ -24,12 +24,12 @@ import tensorflow as tf
 warnings.simplefilter("ignore")
 
 
-# INPUT_DIR = Path("/data/home/levin/data/datastream/anx/anxthermocldphaseM1.c1/")
-# INPUT_GLOB = "*.nc"
 INPUT_DIR = (
     Path(__file__).parent.parent / "preprocessing/data/raw/nsathermocldphaseC1.c1/"
+    # Path(__file__).parent.parent / "preprocessing/data/raw/anxthermocldphaseM1.c1/"
 )
 INPUT_GLOB = "*c1.2021*.nc"
+# INPUT_GLOB = "*.nc"
 
 OUT_DIR = Path(__file__).parent / "data/predictions/"
 OUT_DIR.mkdir(exist_ok=True, parents=True)
