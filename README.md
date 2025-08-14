@@ -11,7 +11,7 @@ is preprocessed and used as input for the models in this paper. The full dataset
 GB), so a script is included to download the files from ARM.gov (`src/preprocessing/data/raw/download.py`).
 
 The full dataset used as input is also [available here](https://adc.arm.gov/discovery/#/results/id::nsathermocldphaseC1.c1_cloud_phase_mplgr_macro_thermocloudphase_cloud?dataLevel=c1&showDetails=true) and can be cited as:
-1
+
 Atmospheric Radiation Measurement (ARM) user facility. 2018. Thermodynamic cloud phase (THERMOCLDPHASE). 2018-01-01 to 2022-12-31, North Slope Alaska (NSA) Central Facility, Barrow AK (C1). Compiled by D. Zhang and M. Levin. ARM Data Center. Data set accessed 2024-08-16 at <http://dx.doi.org/10.5439/1871014>.
 
 ### Output Data
